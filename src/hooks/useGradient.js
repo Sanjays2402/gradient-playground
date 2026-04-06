@@ -1,17 +1,45 @@
-import { useState, useCallback } from 'react'
-import { generateId, randomGradient } from '../utils/gradient'
-import { PRESETS } from '../data/presets'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import {
+  generateId,
+  randomGradient,
+  decodeGradientFromURL,
+  saveGradientToHistory,
+} from '../utils/gradient'
 
-const initialStops = [
+const defaultStops = [
   { id: generateId(), color: '#7c5cfc', position: 0 },
   { id: generateId(), color: '#00dbde', position: 50 },
   { id: generateId(), color: '#fc00ff', position: 100 },
 ]
 
+function getInitialState() {
+  const fromURL = decodeGradientFromURL()
+  if (fromURL) return fromURL
+  return { type: 'linear', angle: 135, stops: defaultStops }
+}
+
 export function useGradient() {
-  const [type, setType] = useState('linear')
-  const [angle, setAngle] = useState(135)
-  const [stops, setStops] = useState(initialStops)
+  const initial = useRef(getInitialState()).current
+  const [type, setType] = useState(initial.type)
+  const [angle, setAngle] = useState(initial.angle)
+  const [stops, setStops] = useState(initial.stops)
+
+  // Debounce save to history whenever gradient changes
+  const saveTimer = useRef(null)
+  useEffect(() => {
+    clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      saveGradientToHistory({ type, angle, stops })
+    }, 1000)
+    return () => clearTimeout(saveTimer.current)
+  }, [type, angle, stops])
+
+  // Clear URL params/hash after loading from URL so it doesn't persist
+  useEffect(() => {
+    if (window.location.search || window.location.hash) {
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+  }, [])
 
   const addStop = useCallback(() => {
     setStops((prev) => {
@@ -19,7 +47,6 @@ export function useGradient() {
       const pos = Math.floor(Math.random() * 100)
       const hue = Math.floor(Math.random() * 360)
       const color = `hsl(${hue}, 70%, 55%)`
-      // Convert hsl to hex
       const canvas = document.createElement('canvas')
       canvas.width = 1
       canvas.height = 1

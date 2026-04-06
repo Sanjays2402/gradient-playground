@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { useGradient } from './hooks/useGradient'
 import GradientPreview from './components/GradientPreview'
@@ -6,6 +7,8 @@ import AngleControl from './components/AngleControl'
 import ColorStopEditor from './components/ColorStopEditor'
 import CodeOutput from './components/CodeOutput'
 import PresetGallery from './components/PresetGallery'
+import GradientHistory from './components/GradientHistory'
+import { generateId } from './utils/gradient'
 
 export default function App() {
   const {
@@ -14,12 +17,49 @@ export default function App() {
     angle,
     setAngle,
     stops,
+    setStops,
     addStop,
     removeStop,
     updateStop,
     applyPreset,
     randomize,
   } = useGradient()
+
+  const [animating, setAnimating] = useState(false)
+  const animRef = useRef(null)
+  const angleRef = useRef(angle)
+
+  // Keep angleRef in sync when user changes angle manually
+  useEffect(() => {
+    angleRef.current = angle
+  }, [angle])
+
+  // Animation loop for gradient rotation
+  useEffect(() => {
+    if (!animating) {
+      if (animRef.current) cancelAnimationFrame(animRef.current)
+      return
+    }
+    let lastTime = performance.now()
+    const tick = (now) => {
+      const delta = now - lastTime
+      lastTime = now
+      // ~30 degrees per second
+      angleRef.current = (angleRef.current + delta * 0.03) % 360
+      setAngle(Math.round(angleRef.current))
+      animRef.current = requestAnimationFrame(tick)
+    }
+    animRef.current = requestAnimationFrame(tick)
+    return () => {
+      if (animRef.current) cancelAnimationFrame(animRef.current)
+    }
+  }, [animating, setAngle])
+
+  const handleHistorySelect = (entry) => {
+    setType(entry.type)
+    setAngle(entry.angle)
+    setStops(entry.stops.map(s => ({ ...s, id: s.id || generateId() })))
+  }
 
   return (
     <div className="h-full w-full relative">
@@ -46,21 +86,45 @@ export default function App() {
                   <p className="text-[10px] text-white/30 mt-0.5">CSS gradient builder</p>
                 </div>
               </div>
-              <motion.button
-                whileHover={{ scale: 1.05, rotate: 90 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={randomize}
-                className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.06] flex items-center justify-center text-white/50 hover:text-white/90 transition-colors cursor-pointer"
-                title="Randomize"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="16 3 21 3 21 8" />
-                  <line x1="4" y1="20" x2="21" y2="3" />
-                  <polyline points="21 16 21 21 16 21" />
-                  <line x1="15" y1="15" x2="21" y2="21" />
-                  <line x1="4" y1="4" x2="9" y2="9" />
-                </svg>
-              </motion.button>
+              <div className="flex items-center gap-1.5">
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setAnimating(a => !a)}
+                  className={`w-8 h-8 rounded-lg border flex items-center justify-center transition-colors cursor-pointer ${
+                    animating
+                      ? 'bg-accent/20 border-accent/40 text-accent'
+                      : 'bg-white/[0.06] hover:bg-white/[0.1] border-white/[0.06] text-white/50 hover:text-white/90'
+                  }`}
+                  title={animating ? 'Stop animation' : 'Animate gradient'}
+                >
+                  {animating ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                      <rect x="6" y="4" width="4" height="16" rx="1" />
+                      <rect x="14" y="4" width="4" height="16" rx="1" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+                    </svg>
+                  )}
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05, rotate: 90 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={randomize}
+                  className="w-8 h-8 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.06] flex items-center justify-center text-white/50 hover:text-white/90 transition-colors cursor-pointer"
+                  title="Randomize"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="16 3 21 3 21 8" />
+                    <line x1="4" y1="20" x2="21" y2="3" />
+                    <polyline points="21 16 21 21 16 21" />
+                    <line x1="15" y1="15" x2="21" y2="21" />
+                    <line x1="4" y1="4" x2="9" y2="9" />
+                  </svg>
+                </motion.button>
+              </div>
             </div>
 
             <GradientTypeSelector type={type} setType={setType} />
@@ -76,6 +140,7 @@ export default function App() {
               updateStop={updateStop}
             />
             <PresetGallery applyPreset={applyPreset} />
+            <GradientHistory onSelect={handleHistorySelect} />
           </div>
 
           {/* Footer - Code output */}
@@ -93,7 +158,7 @@ export default function App() {
         className="absolute bottom-6 left-6 flex items-center gap-3"
       >
         <div className="px-3 py-1.5 rounded-lg bg-black/30 backdrop-blur-xl border border-white/[0.06] text-[10px] text-white/30 font-mono">
-          {type} · {angle}° · {stops.length} stops
+          {type} · {angle}° · {stops.length} stops{animating ? ' · ✦ animating' : ''}
         </div>
       </motion.div>
     </div>

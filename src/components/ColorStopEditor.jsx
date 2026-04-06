@@ -1,16 +1,17 @@
 import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import ColorHarmony from './ColorHarmony'
 
 export default function ColorStopEditor({ stops, addStop, removeStop, updateStop }) {
   const barRef = useRef(null)
   const [dragging, setDragging] = useState(null)
   const [editingColor, setEditingColor] = useState(null)
+  const [harmonyFor, setHarmonyFor] = useState(null)
 
   const handleBarClick = useCallback(
     (e) => {
       if (dragging) return
       if (e.target !== barRef.current) return
-      // Don't add on bar click, use the button
     },
     [dragging]
   )
@@ -62,13 +63,11 @@ export default function ColorStopEditor({ stops, addStop, removeStop, updateStop
         style={{ background: barGradient }}
         onClick={handleBarClick}
       >
-        {/* Checkered background for transparency */}
         <div className="absolute inset-0 rounded-lg -z-10 opacity-30" style={{
           backgroundImage: 'repeating-conic-gradient(#808080 0% 25%, transparent 0% 50%)',
           backgroundSize: '8px 8px',
         }} />
 
-        {/* Stop handles */}
         {stops.map((stop) => (
           <motion.div
             key={stop.id}
@@ -104,12 +103,16 @@ export default function ColorStopEditor({ stops, addStop, removeStop, updateStop
               transition={{ type: 'spring', stiffness: 400, damping: 28 }}
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.05] group hover:border-white/[0.1] transition-colors"
             >
-              {/* Color picker */}
+              {/* Color picker + harmony */}
               <div className="relative">
                 <div
                   className="w-6 h-6 rounded-md border border-white/[0.15] cursor-pointer shadow-sm transition-transform hover:scale-110"
                   style={{ backgroundColor: stop.color }}
                   onClick={() => setEditingColor(editingColor === stop.id ? null : stop.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setHarmonyFor(harmonyFor === stop.id ? null : stop.id)
+                  }}
                 />
                 {editingColor === stop.id && (
                   <div className="absolute top-full left-0 mt-2 z-50">
@@ -124,9 +127,25 @@ export default function ColorStopEditor({ stops, addStop, removeStop, updateStop
                         onChange={(e) => updateStop(stop.id, { color: e.target.value })}
                         className="w-32 h-32 rounded-lg cursor-pointer border-0 bg-transparent"
                       />
+                      {/* Harmony swatches below the picker */}
+                      <ColorHarmonySuggestions
+                        color={stop.color}
+                        onSelect={(c) => updateStop(stop.id, { color: c })}
+                      />
                     </motion.div>
                   </div>
                 )}
+                <AnimatePresence>
+                  {harmonyFor === stop.id && (
+                    <ColorHarmony
+                      color={stop.color}
+                      onSelect={(c) => {
+                        updateStop(stop.id, { color: c })
+                        setHarmonyFor(null)
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
               </div>
 
               {/* Hex value */}
@@ -164,6 +183,38 @@ export default function ColorStopEditor({ stops, addStop, removeStop, updateStop
             </motion.div>
           ))}
         </AnimatePresence>
+      </div>
+    </div>
+  )
+}
+
+// Inline harmony suggestions under the color picker
+import { useMemo } from 'react'
+import { getColorHarmonies } from '../utils/gradient'
+
+function ColorHarmonySuggestions({ color, onSelect }) {
+  const harmonies = useMemo(() => getColorHarmonies(color), [color])
+  const all = [
+    ...harmonies.complementary,
+    ...harmonies.analogous,
+    ...harmonies.triadic,
+  ]
+
+  return (
+    <div className="mt-2 pt-2 border-t border-white/[0.08]">
+      <p className="text-[9px] text-white/30 mb-1.5">Harmonies</p>
+      <div className="flex flex-wrap gap-1">
+        {all.map((c) => (
+          <motion.button
+            key={c}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={(e) => { e.stopPropagation(); onSelect(c) }}
+            className="w-5 h-5 rounded border border-white/[0.15] cursor-pointer"
+            style={{ backgroundColor: c }}
+            title={c}
+          />
+        ))}
       </div>
     </div>
   )
